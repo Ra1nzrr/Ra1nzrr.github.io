@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .canvas-container {
+            position: relative;
+            width: 600px;
+            height: 400px;
+            margin: 20px auto;
+            border: 2px solid #333;
+            background: #1e1e1e;
+        }
+        #plotCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .controls {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .log-container {
+            margin: 20px 0;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            font-family: monospace;
+            margin: 5px 0;
+            padding: 5px;
+            background: white;
+            border-radius: 3px;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            background: #2196F3;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #1976D2;
+        }
+        .train-button {
+            background: #4CAF50;
+        }
+        .train-button:hover {
+            background: #388E3C;
+        }
+        .status {
+            text-align: center;
+            font-weight: bold;
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background: #C8E6C9;
+            color: #2E7D32;
+        }
+        .training {
+            background: #FFF3E0;
+            color: #E65100;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>感知器二分类训练</h2>
+        
+        <div class="controls">
+            <div class="button-group">
+                <button id="addBlue">添加蓝色样本</button>
+                <button id="addYellow">添加黄色样本</button>
+                <button id="clear">清除所有点</button>
+            </div>
+            <div class="learning-control">
+                <label>学习率:
+                    <input type="range" id="learningRate" min="0.01" max="0.5" step="0.01" value="0.1">
+                    <span id="learningRateValue">0.1</span>
+                </label>
+            </div>
+            <button id="train" class="train-button">训练一次</button>
+        </div>
+
+        <div id="status" class="status"></div>
+
+        <div class="canvas-container">
+            <canvas id="plotCanvas" width="600" height="400"></canvas>
+        </div>
+
+        <div class="log-container" id="logContainer"></div>
+    </div>
+
+    <script>
+        class Perceptron {
+            constructor(learningRate = 0.1) {
+                this.weights = [Math.random() - 0.5, Math.random() - 0.5];
+                this.bias = Math.random() - 0.5;
+                this.learningRate = learningRate;
+            }
+
+            predict(inputs) {
+                const sum = inputs[0] * this.weights[0] + 
+                           inputs[1] * this.weights[1] + 
+                           this.bias;
+                return sum >= 0 ? 1 : -1;
+            }
+
+            train(inputs, target) {
+                const prediction = this.predict(inputs);
+                const error = target - prediction;
+                
+                if (error !== 0) {
+                    const deltaWeights = inputs.map(input => 
+                        this.learningRate * error * input
+                    );
+                    const deltaBias = this.learningRate * error;
+
+                    this.weights = this.weights.map((w, i) => w + deltaWeights[i]);
+                    this.bias += deltaBias;
+
+                    return {
+                        error,
+                        deltaWeights,
+                        deltaBias,
+                        newWeights: [...this.weights],
+                        newBias: this.bias
+                    };
+                }
+                return null;
+            }
+
+            getLine(width, height) {
+                const w1 = this.weights[0];
+                const w2 = this.weights[1];
+                const b = this.bias;
+                
+                const x1 = -width/2;
+                const y1 = (-w1 * x1 - b) / w2;
+                const x2 = width/2;
+                const y2 = (-w1 * x2 - b) / w2;
+                
+                return { x1, y1, x2, y2 };
+            }
+        }
+
+        class Visualizer {
+            constructor() {
+                this.canvas = document.getElementById('plotCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.points = [];
+                this.perceptron = new Perceptron();
+                this.setupEventListeners();
+                this.draw();
+            }
+
+            setupEventListeners() {
+                this.canvas.addEventListener('click', (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const x = (e.clientX - rect.left) / this.canvas.width * 2 - 1;
+                    const y = -((e.clientY - rect.top) / this.canvas.height * 2 - 1);
+                    this.addPoint(x, y, 1);  // 默认添加黄色点
+                });
+
+                document.getElementById('addBlue').addEventListener('click', () => {
+                    this.canvas.onclick = (e) => {
+                        const rect = this.canvas.getBoundingClientRect();
+                        const x = (e.clientX - rect.left) / this.canvas.width * 2 - 1;
+                        const y = -((e.clientY - rect.top) / this.canvas.height * 2 - 1);
+                        this.addPoint(x, y, -1);
+                    };
+                });
+
+                document.getElementById('addYellow').addEventListener('click', () => {
+                    this.canvas.onclick = (e) => {
+                        const rect = this.canvas.getBoundingClientRect();
+                        const x = (e.clientX - rect.left) / this.canvas.width * 2 - 1;
+                        const y = -((e.clientY - rect.top) / this.canvas.height * 2 - 1);
+                        this.addPoint(x, y, 1);
+                    };
+                });
+
+                document.getElementById('train').addEventListener('click', () => {
+                    this.trainOneEpoch();
+                });
+
+                document.getElementById('clear').addEventListener('click', () => {
+                    this.points = [];
+                    this.perceptron = new Perceptron(this.perceptron.learningRate);
+                    this.draw();
+                    this.clearLog();
+                    this.updateStatus('');
+                });
+
+                document.getElementById('learningRate').addEventListener('input', (e) => {
+                    this.perceptron.learningRate = parseFloat(e.target.value);
+                    document.getElementById('learningRateValue').textContent = e.target.value;
+                });
+            }
+
+            addPoint(x, y, className) {
+                this.points.push({ x, y, class: className });
+                this.draw();
+                this.updateStatus('点击"训练一次"进行训练');
+            }
+
+            trainOneEpoch() {
+                let totalError = 0;
+                let updates = 0;
+                
+                // 随机打乱点的顺序
+                const shuffledPoints = [...this.points].sort(() => Math.random() - 0.5);
+                
+                shuffledPoints.forEach(point => {
+                    const result = this.perceptron.train(
+                        [point.x, point.y],
+                        point.class
+                    );
+                    
+                    if (result) {
+                        totalError += Math.abs(result.error);
+                        updates++;
+                        this.logTrainingStep(result);
+                    }
+                });
+
+                this.draw();
+                
+                if (totalError === 0) {
+                    this.updateStatus('完美分类！所有点都已正确分类', 'success');
+                } else {
+                    this.updateStatus(`训练中... (本轮更新${updates}个点)`, 'training');
+                }
+
+                return totalError;
+            }
+
+            draw() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // 绘制坐标轴
+                this.ctx.strokeStyle = '#666';
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, this.canvas.height/2);
+                this.ctx.lineTo(this.canvas.width, this.canvas.height/2);
+                this.ctx.moveTo(this.canvas.width/2, 0);
+                this.ctx.lineTo(this.canvas.width/2, this.canvas.height);
+                this.ctx.stroke();
+
+                // 绘制分割线
+                const line = this.perceptron.getLine(2, 2);
+                const canvasLine = {
+                    x1: (line.x1 + 1) * this.canvas.width / 2,
+                    y1: (-line.y1 + 1) * this.canvas.height / 2,
+                    x2: (line.x2 + 1) * this.canvas.width / 2,
+                    y2: (-line.y2 + 1) * this.canvas.height / 2
+                };
+
+                this.ctx.strokeStyle = '#fff';
+                this.ctx.beginPath();
+                this.ctx.moveTo(canvasLine.x1, canvasLine.y1);
+                this.ctx.lineTo(canvasLine.x2, canvasLine.y2);
+                this.ctx.stroke();
+
+                // 绘制所有点
+                this.points.forEach(point => {
+                    const canvasX = (point.x + 1) * this.canvas.width / 2;
+                    const canvasY = (-point.y + 1) * this.canvas.height / 2;
+                    
+                    this.ctx.beginPath();
+                    this.ctx.arc(canvasX, canvasY, 6, 0, Math.PI * 2);
+                    this.ctx.fillStyle = point.class === 1 ? '#ffeb3b' : '#2196F3';
+                    this.ctx.fill();
+                });
+            }
+
+            logTrainingStep(result) {
+                const logContainer = document.getElementById('logContainer');
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                logEntry.innerHTML = `
+                    误差: ${result.error}<br>
+                    权重更新: [${result.deltaWeights.map(w => w.toFixed(4)).join(', ')}]<br>
+                    偏置更新: ${result.deltaBias.toFixed(4)}<br>
+                    新权重: [${result.newWeights.map(w => w.toFixed(4)).join(', ')}]<br>
+                    新偏置: ${result.newBias.toFixed(4)}
+                `;
+                logContainer.insertBefore(logEntry, logContainer.firstChild);
+            }
+
+            updateStatus(message, type = '') {
+                const status = document.getElementById('status');
+                status.textContent = message;
+                status.className = 'status ' + type;
+            }
+
+            clearLog() {
+                document.getElementById('logContainer').innerHTML = '';
+            }
+        }
+
+        // 初始化可视化器
+        const visualizer = new Visualizer();
+    </script>
+</body>
+</html>
