@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        .container {
+            max-width: 1000px;
+            margin: 20px auto;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            display: flex;
+        }
+        .controls {
+            width: 250px;
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 10px;
+            margin-right: 20px;
+        }
+        .visualization {
+            flex: 1;
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .input-group {
+            margin: 20px 0;
+            position: relative;
+            padding-left: 40px;
+        }
+        .input-label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: block;
+        }
+        .slider-container {
+            position: relative;
+            height: 200px;
+            width: 40px;
+            background: #ddd;
+            border-radius: 20px;
+            margin: 10px 0;
+        }
+        .slider {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 30px;
+            height: 30px;
+            background: #2196F3;
+            border-radius: 50%;
+            cursor: ns-resize;
+            touch-action: none;
+        }
+        .slider-value {
+            position: absolute;
+            left: -40px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 35px;
+            text-align: right;
+            font-weight: bold;
+        }
+        .node {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: white;
+            border: 2px solid #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        .line {
+            position: absolute;
+            height: 2px;
+            background: #666;
+            transform-origin: left center;
+        }
+        .sum-node {
+            width: 80px;
+            height: 80px;
+            font-size: 24px;
+        }
+        .activation-node {
+            border-radius: 10px;
+            background: #4CAF50;
+            color: white;
+        }
+        #perceptron-viz {
+            position: relative;
+            height: 400px;
+            margin-top: 50px;
+        }
+        .weight-label {
+            position: absolute;
+            transform: rotate(-20deg);
+            font-weight: bold;
+            color: #666;
+        }
+        .result-panel {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="controls">
+            <h3>控制面板</h3>
+            <!-- 输入控制 -->
+            <div class="input-group">
+                <div class="input-label">输入值 (x)</div>
+                <div class="slider-container" id="x1-container">
+                    <div class="slider-value">1.0</div>
+                    <div class="slider" id="x1-slider"></div>
+                </div>
+                <div class="slider-container" id="x2-container">
+                    <div class="slider-value">1.0</div>
+                    <div class="slider" id="x2-slider"></div>
+                </div>
+            </div>
+            
+            <!-- 权重控制 -->
+            <div class="input-group">
+                <div class="input-label">权重 (w)</div>
+                <div class="slider-container" id="w1-container">
+                    <div class="slider-value">0.5</div>
+                    <div class="slider" id="w1-slider"></div>
+                </div>
+                <div class="slider-container" id="w2-container">
+                    <div class="slider-value">0.5</div>
+                    <div class="slider" id="w2-slider"></div>
+                </div>
+            </div>
+            
+            <!-- 偏置控制 -->
+            <div class="input-group">
+                <div class="input-label">偏置 (b)</div>
+                <div class="slider-container" id="b-container">
+                    <div class="slider-value">0.0</div>
+                    <div class="slider" id="b-slider"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="visualization">
+            <div id="perceptron-viz"></div>
+            <div class="result-panel">
+                <div id="calculation"></div>
+                <div id="final-result"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class Slider {
+            constructor(containerId, initialValue, min, max, onChange) {
+                this.container = document.getElementById(containerId);
+                this.slider = this.container.querySelector('.slider');
+                this.valueDisplay = this.container.querySelector('.slider-value');
+                this.min = min;
+                this.max = max;
+                this.value = initialValue;
+                this.onChange = onChange;
+                
+                this.containerHeight = this.container.clientHeight;
+                this.sliderHeight = this.slider.clientHeight;
+                this.updatePosition();
+                
+                this.slider.addEventListener('mousedown', this.startDragging.bind(this));
+                document.addEventListener('mousemove', this.drag.bind(this));
+                document.addEventListener('mouseup', this.stopDragging.bind(this));
+                
+                this.isDragging = false;
+            }
+            
+            startDragging(e) {
+                this.isDragging = true;
+                e.preventDefault();
+            }
+            
+            stopDragging() {
+                this.isDragging = false;
+            }
+            
+            drag(e) {
+                if (!this.isDragging) return;
+                
+                const rect = this.container.getBoundingClientRect();
+                const y = Math.max(0, Math.min(this.containerHeight - this.sliderHeight,
+                    e.clientY - rect.top - this.sliderHeight/2));
+                
+                const percentage = 1 - (y / (this.containerHeight - this.sliderHeight));
+                this.value = this.min + (this.max - this.min) * percentage;
+                
+                this.updatePosition();
+                this.onChange(this.value);
+            }
+            
+            updatePosition() {
+                const percentage = (this.value - this.min) / (this.max - this.min);
+                const y = (1 - percentage) * (this.containerHeight - this.sliderHeight);
+                this.slider.style.top = `${y}px`;
+                this.valueDisplay.textContent = this.value.toFixed(1);
+            }
+        }
+
+        // 初始化所有滑块
+        const values = {
+            x1: 1.0, x2: 1.0,
+            w1: 0.5, w2: 0.5,
+            b: 0.0
+        };
+
+        function updateCalculation() {
+            const z = values.x1 * values.w1 + values.x2 * values.w2 + values.b;
+            const y = z >= 0 ? 1 : 0;
+            
+            document.getElementById('calculation').textContent = 
+                `z = ${values.w1.toFixed(1)}×${values.x1.toFixed(1)} + ${values.w2.toFixed(1)}×${values.x2.toFixed(1)} + ${values.b.toFixed(1)} = ${z.toFixed(2)}`;
+            document.getElementById('final-result').textContent = 
+                `输出 y = ${y}`;
+            
+            // 更新可视化
+            updateVisualization(z, y);
+        }
+
+        function updateVisualization(z, y) {
+            const viz = document.getElementById('perceptron-viz');
+            viz.innerHTML = `
+                <div class="node" style="left: 50px; top: 100px;">x₁</div>
+                <div class="node" style="left: 50px; top: 250px;">x₂</div>
+                <div class="node sum-node" style="left: 300px; top: 175px;">Σ</div>
+                <div class="node activation-node" style="left: 550px; top: 175px;">y=${y}</div>
+            `;
+            
+            // 添加连接线和权重标签
+            const lines = `
+                <div class="line" style="width: 280px; left: 80px; top: 130px; transform: rotate(20deg);">
+                    <span class="weight-label" style="left: 120px; top: -20px;">w₁=${values.w1.toFixed(1)}</span>
+                </div>
+                <div class="line" style="width: 280px; left: 80px; top: 280px; transform: rotate(-20deg);">
+                    <span class="weight-label" style="left: 120px; top: 10px;">w₂=${values.w2.toFixed(1)}</span>
+                </div>
+                <div class="line" style="width: 200px; left: 350px; top: 215px;"></div>
+            `;
+            viz.innerHTML += lines;
+        }
+
+        // 创建所有滑块并设置更新回调
+        new Slider('x1-container', 1.0, -2, 2, v => { values.x1 = v; updateCalculation(); });
+        new Slider('x2-container', 1.0, -2, 2, v => { values.x2 = v; updateCalculation(); });
+        new Slider('w1-container', 0.5, -2, 2, v => { values.w1 = v; updateCalculation(); });
+        new Slider('w2-container', 0.5, -2, 2, v => { values.w2 = v; updateCalculation(); });
+        new Slider('b-container', 0.0, -2, 2, v => { values.b = v; updateCalculation(); });
+
+        // 初始化计算和可视化
+        updateCalculation();
+    </script>
+</body>
+</html>
